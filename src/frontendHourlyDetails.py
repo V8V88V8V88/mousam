@@ -19,7 +19,7 @@ icon_loc += "arrow.svg"
 class HourlyDetails(Gtk.Grid):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.set_hexpand(True)
+        # self.set_hexpand(True) # Removed to allow shrinking
         self.set_css_classes(["view", "card", "custom_card"])
 
         if settings.is_using_dynamic_bg:
@@ -54,7 +54,7 @@ class HourlyDetails(Gtk.Grid):
         first_btn = None
         for label, page_name in button_data:
             button = Gtk.ToggleButton.new_with_label(_(label))
-            button.set_size_request(80, 16)
+            # button.set_size_request(80, 16) # Allow natural size
             button.set_css_classes(["btn_sm"])
             if first_btn is None:
                 first_btn = button
@@ -98,7 +98,6 @@ class HourlyDetails(Gtk.Grid):
         val_label.set_css_classes(["text-3", "light-3", "bold-1"])
         info_grid.attach(val_label, 1, 0, 2, 2)
         unit_label = Gtk.Label(label=hourly_data.windspeed_10m.get("unit"))
-        unit_label.set_css_classes(["text-5", "light-2", "bold-3"])
         info_grid.attach(unit_label, 3, 0, 1, 2)
 
         # Hourly Page
@@ -175,7 +174,7 @@ class HourlyDetails(Gtk.Grid):
 
         for i in range(24):
             graphic_box = Gtk.Box(
-                orientation=Gtk.Orientation.VERTICAL, margin_start=4, margin_end=4
+                orientation=Gtk.Orientation.VERTICAL, margin_start=1, margin_end=1 # Reduced margins
             )
             graphic_box.set_css_classes(["custom_card_hourly", "bg_light_grey"])
 
@@ -234,7 +233,7 @@ class HourlyDetails(Gtk.Grid):
 
                 icon_main = Gtk.Image().new_from_file(condition_icon)
                 icon_main.set_hexpand(True)
-                icon_main.set_pixel_size(46)
+                icon_main.set_pixel_size(32)
                 icon_box.set_margin_bottom(10)
                 icon_box.append(icon_main)
 
@@ -243,11 +242,15 @@ class HourlyDetails(Gtk.Grid):
                 prec = hourly_data.precipitation.get("data")[i]
                 if settings.is_using_inch_for_prec:
                     prec = hourly_data.precipitation.get("data")[i] / 25.4
-                if max_prec == 0:
-                    bar_obj = DrawBar(0)
-                else:
-                    bar_obj = DrawBar(prec / max_prec)
-                icon_box.append(bar_obj.dw)
+                
+                # Only add the bar if precipitation is greater than 0
+                if prec > 0:
+                    if max_prec == 0: # Avoid division by zero if max_prec is somehow 0
+                        bar_obj = DrawBar(0)
+                    else:
+                        bar_obj = DrawBar(prec / max_prec)
+                    icon_box.append(bar_obj.dw)
+                # Always set the label, even if 0
                 if prec > 0:
                     label_val.set_text("{:.2f}".format(prec))
                     if prec < 0.01:

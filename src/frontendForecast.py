@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import gi
-from gi.repository import Gtk
+from gi.repository import Gtk, Pango
 from gettext import gettext as _
 from .constants import icons
 from .config import settings
@@ -32,16 +32,18 @@ class Forecast(Gtk.Grid):
         style_buttons_box.add_css_class("linked")
         style_buttons_box.set_margin_start(2)
         style_buttons_box.set_valign(Gtk.Align.CENTER)
+        style_buttons_box.set_hexpand(True)
+        style_buttons_box.set_halign(Gtk.Align.CENTER)
 
         tomorrow_btn = Gtk.ToggleButton.new_with_label(_("Tomorrow"))
-        tomorrow_btn.set_size_request(80, 16)
+        tomorrow_btn.set_size_request(90, 20) # Increased size to fit text
         tomorrow_btn.set_css_classes(["btn_sm"])
         tomorrow_btn.do_clicked(tomorrow_btn)
         style_buttons_box.append(tomorrow_btn)
         tomorrow_btn.connect("clicked", self._on_tomorrow_forecast_btn_clicked)
 
         weekly_btn = Gtk.ToggleButton.new_with_label(_("Weekly"))
-        weekly_btn.set_size_request(80, 16)
+        weekly_btn.set_size_request(90, 20) # Increased size to fit text
         weekly_btn.set_css_classes(["btn_sm"])
         weekly_btn.set_group(tomorrow_btn)
         style_buttons_box.append(weekly_btn)
@@ -84,14 +86,16 @@ class Forecast(Gtk.Grid):
         # Create scrolled window , add it to stack-box
         scrolled_window = Gtk.ScrolledWindow(margin_top=4, margin_bottom=4)
         scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_size_request(260, 480)
         scrolled_window.set_kinetic_scrolling(True)
+        # Set a smaller min width so layout can compress further on narrow screens
+        scrolled_window.set_min_content_width(180)
         box.append(scrolled_window)
 
         # Forecast card container
         forecast_container = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, margin_top=0, margin_bottom=0
         )
+        forecast_container.set_vexpand(True)
         scrolled_window.set_child(forecast_container)
 
         items_range = 7
@@ -142,9 +146,12 @@ class Forecast(Gtk.Grid):
 
             # Add dt_label Label
             label_box = Gtk.Box()
-            label_box.set_size_request(80, 60)
+            label_box.set_size_request(70, 60) # Adjusted width for better balance
             label_day_time = Gtk.Label(label=dt_label, halign=Gtk.Align.START)
             label_day_time.set_css_classes(["text-5", "bold-2", "light-2"])
+            # Make labels compress better with ellipsis if too narrow
+            label_day_time.set_ellipsize(Pango.EllipsizeMode.END)
+            label_day_time.set_max_width_chars(8)
             label_box.append(label_day_time)
             forecast_item_grid.attach(label_box, 0, 0, 1, 1)
 
@@ -156,10 +163,10 @@ class Forecast(Gtk.Grid):
             condition_icon = Gtk.Image().new_from_file(icons[str(weather_code)])
             condition_icon.set_halign(Gtk.Align.CENTER)
             condition_icon.set_hexpand(True)
-            condition_icon.set_pixel_size(43)
+            condition_icon.set_pixel_size(32) # Reduced from 43 to 32
             forecast_item_grid.attach(condition_icon, 1, 0, 1, 1)
 
-            forecast_cond_grid = Gtk.Grid(valign=Gtk.Align.CENTER, margin_end=20)
+            forecast_cond_grid = Gtk.Grid(valign=Gtk.Align.CENTER, margin_end=10) # Reduced from 20 to 10
             forecast_item_grid.attach(forecast_cond_grid, 2, 0, 1, 1)
 
             # Temp label grid =====
@@ -169,7 +176,7 @@ class Forecast(Gtk.Grid):
             # Max temp label ======
             temp_max = Gtk.Label(
                 label=f"{temp_max_text:.0f}° ",
-                margin_start=10,
+                margin_start=5, # Reduced from 10 to 5
             )
             temp_max.set_css_classes(["text-4", "bold-2"])
             temp_label_grid.attach(temp_max, 1, 0, 1, 1)

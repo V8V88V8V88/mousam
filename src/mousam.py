@@ -40,6 +40,8 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
 
         self.main_window = self
         self.set_default_size(settings.window_width, settings.window_height)
+        # Further reduced minimum window size to allow better shrinking
+        self.set_size_request(280, 400)
         self.connect("close-request", self.save_window_state)
         self.set_title("")
         self._use_dynamic_bg()
@@ -104,14 +106,19 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         # Scroll content on small screens
         self.scrolled_window = Gtk.ScrolledWindow()
         self.scrolled_window.set_policy(
-            Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC
+            Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC
         )
         self.scrolled_window.set_kinetic_scrolling(True)
         self.toast_overlay.set_child(self.scrolled_window)
 
-        # Main _clamp
+        # Content Box - main vertical container for all content
+        self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.content_box.set_vexpand(True)
+        self.scrolled_window.set_child(self.content_box)
+
+        # Main clamp to restrict max width
         self.clamp = Adw.Clamp(maximum_size=1400, tightening_threshold=100)
-        self.scrolled_window.set_child(self.clamp)
+        self.content_box.append(self.clamp)
 
         # main stack
         self.main_stack = Gtk.Stack.new()
@@ -129,6 +136,16 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         keycont.connect("key-pressed", self.on_key_press)
         self.add_controller(keycont)
 
+        # Observe window default width/height changes to handle responsive layout
+        self.connect("notify::default-width", self._on_window_resize)
+        self.connect("notify::default-height", self._on_window_resize)
+
+        # Hold references to dynamic containers (will be set later)
+        self.detail_forecast_box = None
+        self.card_flow_ref = None
+        self.forecast_box_ref = None
+        self.card_box_ref = None
+
     # =========== Create Loader =============
     def show_loader(self):
         # Loader container
@@ -138,8 +155,9 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             return
 
         container_loader = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        container_loader.set_margin_top(200)
-        container_loader.set_margin_bottom(200)
+        container_loader.set_vexpand(True) 
+        container_loader.set_margin_top(100)
+        container_loader.set_margin_bottom(100)
 
         # Create loader
         loader = Gtk.Spinner()
@@ -166,8 +184,9 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             return
 
         container_welcome = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        container_welcome.set_margin_top(180)
-        container_welcome.set_margin_bottom(190)
+        container_welcome.set_vexpand(True)
+        container_welcome.set_margin_top(100)
+        container_welcome.set_margin_bottom(100)
 
         icon_mousam = Gtk.Image().new_from_icon_name("io.github.amit9838.mousam")
         icon_mousam.set_hexpand(True)
@@ -278,36 +297,62 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             cw_data.weathercode.get("data"), cw_data.is_day.get("data")
         )
 
-        # Check if no city is added
-
-        # Reset city to default if all cities are removed
-        # if len(settings.added_cities) == 0:
-
-        child = self.main_stack.get_child_by_name("main_grid")
+        child = self.main_stack.get_child_by_name("main_content")
         if child is not None:
             self.main_stack.remove(child)
 
-        # ------- Main grid ---------
-
-        self.main_grid = Gtk.Grid()
-        self.main_grid.set_hexpand(True)
-        self.main_grid.set_vexpand(True)
-        self.main_stack.add_named(self.main_grid, "main_grid")
-
-        # -------- Card Current condition  ---------
+        # Create main content container
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.set_vexpand(True)
+        content_box.set_margin_bottom(20)
+        
+        # -------- Card Current condition ---------
+        current_condition_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        current_condition_box.set_margin_bottom(10)
         current_container_clamp = Adw.Clamp(maximum_size=1400, tightening_threshold=200)
-        self.main_grid.attach(current_container_clamp, 0, 0, 3, 1)
         current_container_clamp.set_child(CurrentCondition())
-        self.main_grid.attach(HourlyDetails(), 0, 1, 2, 1)
-
-        # --------- Card Forecast ----------
-        forecast_container_clamp = Adw.Clamp(maximum_size=800, tightening_threshold=100)
-        forecast_container_clamp.set_child(Forecast())
-        self.main_grid.attach(forecast_container_clamp, 2, 1, 1, 2)
-
-        # ========= widget grid to hold Cards ==========
-        widget_grid = Gtk.Grid()
-        self.main_grid.attach(widget_grid, 1, 2, 1, 1)
+        current_condition_box.append(current_container_clamp)
+        content_box.append(current_condition_box)
+        
+        # Main container that will hold all content
+        main_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)  # reduced spacing
+        
+        # Create a box for hourly details
+        hourly_details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hourly_details_box.set_margin_bottom(10)
+        hourly_details = HourlyDetails()
+        hourly_details_box.append(hourly_details)
+        main_container.append(hourly_details_box)
+        
+        # Create a horizontal box that will reflow with size constraints
+        detail_forecast_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)  # further reduced spacing
+        
+        # Create a box for cards
+        card_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card_flow = Gtk.FlowBox()
+        card_flow.set_valign(Gtk.Align.START)
+        card_flow.set_max_children_per_line(3)
+        card_flow.set_min_children_per_line(1)
+        card_flow.set_homogeneous(True)
+        card_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        card_flow.set_row_spacing(6)
+        card_flow.set_column_spacing(6)
+        card_box.append(card_flow)
+        
+        # Create a box for forecast
+        forecast_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        forecast = Forecast()
+        forecast_box.append(forecast)
+        
+        # Add both components side by side in wide layout
+        detail_forecast_box.append(card_box)
+        detail_forecast_box.append(forecast_box)
+        
+        # Add the horizontal layout box to main container
+        main_container.append(detail_forecast_box)
+        
+        # Add the main container to content
+        content_box.append(main_container)
 
         # ------- Card Wind ----------
         card_obj = CardSquare(
@@ -319,7 +364,7 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             sub_desc=_("Northwest"),
             text_up=_("N"),
         )
-        widget_grid.attach(card_obj.card, 0, 0, 1, 1)
+        card_flow.append(card_obj.card)
 
         # -------- Card Humidity ---------
         card_obj = CardSquare(
@@ -334,7 +379,7 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             text_up="100",
             text_low="0",
         )
-        widget_grid.attach(card_obj.card, 1, 0, 1, 1)
+        card_flow.append(card_obj.card)
 
         # ------- Card Pressure -----------
         card_obj = CardSquare(
@@ -346,7 +391,7 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             text_up=C_("pressure card", "High"),
             text_low=C_("pressure card", "Low"),
         )
-        widget_grid.attach(card_obj.card, 0, 1, 1, 1)
+        card_flow.append(card_obj.card)
 
         # -------- Card UV Index ---------
         card_obj = CardSquare(
@@ -356,17 +401,25 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
             text_up=C_("uvindex card", "High"),
             text_low=C_("uvindex card", "Low"),
         )
-        widget_grid.attach(card_obj.card, 1, 1, 1, 1)
+        card_flow.append(card_obj.card)
 
         # -------- Card Pollution ---------
         card_obj = CardAirPollution()
-        widget_grid.attach(card_obj.card, 2, 0, 2, 1)
+        card_flow.append(card_obj.card)
 
         # -------- Card Day/Night --------
         card_obj = CardDayNight()
-        widget_grid.attach(card_obj.card, 2, 1, 2, 1)
+        card_flow.append(card_obj.card)
 
-        self.main_stack.set_visible_child_name("main_grid")
+        # Add the content to the main stack
+        self.main_stack.add_named(content_box, "main_content")
+        self.main_stack.set_visible_child_name("main_content")
+
+        # Save references for responsive behaviour
+        self.detail_forecast_box = detail_forecast_box
+        self.card_flow_ref = card_flow
+        self.forecast_box_ref = forecast_box
+        self.card_box_ref = card_box
 
         if reload_type == "switch":
             self.toast_overlay.add_toast(
@@ -441,3 +494,40 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         settings.window_width = width
         settings.window_height = height
         settings.window_maximized = window.is_maximized()
+
+    # ------------ Responsive layout handler -------------
+    def _on_window_resize(self, *args):
+        """Adjust layouts whenever window size properties change."""
+        # Ensure UI elements are created
+        if not self.detail_forecast_box:
+            return
+
+        # Get current window size
+        width, _ = self.get_default_size()
+
+        # When the window is narrow, stack vertically with forecast first.
+        if width < 450:
+            # Switch to vertical stacking
+            if self.detail_forecast_box.get_orientation() != Gtk.Orientation.VERTICAL:
+                self.detail_forecast_box.set_orientation(Gtk.Orientation.VERTICAL)
+                # Re-order children: forecast on top, cards below
+                self.detail_forecast_box.remove(self.card_box_ref)
+                self.detail_forecast_box.remove(self.forecast_box_ref)
+                self.detail_forecast_box.append(self.forecast_box_ref)
+                self.detail_forecast_box.append(self.card_box_ref)
+
+            # Make cards single column
+            if self.card_flow_ref:
+                self.card_flow_ref.set_max_children_per_line(1)
+        else:
+            # Horizontal side-by-side layout
+            if self.detail_forecast_box.get_orientation() != Gtk.Orientation.HORIZONTAL:
+                self.detail_forecast_box.set_orientation(Gtk.Orientation.HORIZONTAL)
+                # Ensure order: cards first, forecast second
+                self.detail_forecast_box.remove(self.card_box_ref)
+                self.detail_forecast_box.remove(self.forecast_box_ref)
+                self.detail_forecast_box.append(self.card_box_ref)
+                self.detail_forecast_box.append(self.forecast_box_ref)
+
+            if self.card_flow_ref:
+                self.card_flow_ref.set_max_children_per_line(3)

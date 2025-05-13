@@ -44,14 +44,13 @@ class CardSquare:
 
     def create_card(self):
         card = Gtk.Grid(
-            margin_top=6,
-            margin_start=3,
-            margin_end=3,
+            margin_top=4,
+            margin_start=2,
+            margin_end=2,
             row_spacing=3,
             column_spacing=0,
         )
         card.halign = Gtk.Align.FILL
-        card.set_size_request(170, 100)
         card.set_css_classes(["view", "card", "custom_card"])
         
         if settings.is_using_dynamic_bg:
@@ -85,7 +84,6 @@ class CardSquare:
 
         # Short description [light, moderate]
         desc_box = Gtk.Box()
-        desc_box.set_size_request(5, 27)
         card_info.attach(desc_box, 0, 4, 6, 1)
 
         desc = Gtk.Label(label=self.desc)
