@@ -27,7 +27,7 @@ from .weatherData import (
 )
 
 gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
+gi.require_version("Adw", "1.6")
 from gi.repository import Gtk, Adw, Gio, Gdk, GLib
 
 global updated_at
@@ -126,6 +126,10 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         self.main_stack.set_transition_duration(duration=100)
         self.clamp.set_child(self.main_stack)
 
+        # Initialize instance variables
+        self.card_flow_ref = None
+        self.multi_layout_view = None
+
         # Start Loader and call paint UI
         # Initiate UI loading weather data and drawing UI
         thread = threading.Thread(target=self._load_weather_data, name="load_data")
@@ -135,16 +139,6 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         keycont = Gtk.EventControllerKey()
         keycont.connect("key-pressed", self.on_key_press)
         self.add_controller(keycont)
-
-        # Observe window default width/height changes to handle responsive layout
-        self.connect("notify::default-width", self._on_window_resize)
-        self.connect("notify::default-height", self._on_window_resize)
-
-        # Hold references to dynamic containers (will be set later)
-        self.detail_forecast_box = None
-        self.card_flow_ref = None
-        self.forecast_box_ref = None
-        self.card_box_ref = None
 
     # =========== Create Loader =============
     def show_loader(self):
@@ -288,6 +282,9 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         apd.join()
         local_time.join()
         self.get_weather()
+        
+        # Setup responsive layout after UI is built
+        GLib.idle_add(self.setup_responsive_layout)
 
     # ===========  Load weather data and create UI ============
     def get_weather(self, reload_type=None, title=""):
@@ -324,8 +321,8 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         hourly_details_box.append(hourly_details)
         main_container.append(hourly_details_box)
         
-        # Create a horizontal box that will reflow with size constraints
-        detail_forecast_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)  # further reduced spacing
+        # Create AdwMultiLayoutView for responsive layout
+        multi_layout_view = Adw.MultiLayoutView()
         
         # Create a box for cards
         card_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -344,12 +341,43 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         forecast = Forecast()
         forecast_box.append(forecast)
         
-        # Add both components side by side in wide layout
-        detail_forecast_box.append(card_box)
-        detail_forecast_box.append(forecast_box)
+        # Create wide layout (horizontal)
+        wide_layout = Adw.Layout(name="wide")
+        wide_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         
-        # Add the horizontal layout box to main container
-        main_container.append(detail_forecast_box)
+        # Create slots for the horizontal layout
+        card_slot_wide = Adw.LayoutSlot(id="cards")
+        forecast_slot_wide = Adw.LayoutSlot(id="forecast")
+        
+        wide_container.append(card_slot_wide)
+        wide_container.append(forecast_slot_wide)
+        wide_layout.set_content(wide_container)
+        
+        # Create narrow layout (vertical)
+        narrow_layout = Adw.Layout(name="narrow")
+        narrow_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        
+        # Create slots for the vertical layout
+        forecast_slot_narrow = Adw.LayoutSlot(id="forecast")
+        card_slot_narrow = Adw.LayoutSlot(id="cards")
+        
+        narrow_container.append(forecast_slot_narrow)
+        narrow_container.append(card_slot_narrow)
+        narrow_layout.set_content(narrow_container)
+        
+        # Add layouts to MultiLayoutView
+        multi_layout_view.add_layout(wide_layout)
+        multi_layout_view.add_layout(narrow_layout)
+        
+        # Set default layout
+        multi_layout_view.set_layout_name("wide")
+        
+        # Add children to MultiLayoutView
+        multi_layout_view.set_child("cards", card_box)
+        multi_layout_view.set_child("forecast", forecast_box)
+        
+        # Add the MultiLayoutView to main container
+        main_container.append(multi_layout_view)
         
         # Add the main container to content
         content_box.append(main_container)
@@ -415,11 +443,11 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         self.main_stack.add_named(content_box, "main_content")
         self.main_stack.set_visible_child_name("main_content")
 
-        # Save references for responsive behaviour
-        self.detail_forecast_box = detail_forecast_box
+        # Save reference to card flow for column adjustment
         self.card_flow_ref = card_flow
-        self.forecast_box_ref = forecast_box
-        self.card_box_ref = card_box
+        
+        # Save reference to multi_layout_view for breakpoint
+        self.multi_layout_view = multi_layout_view
 
         if reload_type == "switch":
             self.toast_overlay.add_toast(
@@ -496,38 +524,38 @@ class WeatherMainWindow(Gtk.ApplicationWindow):
         settings.window_maximized = window.is_maximized()
 
     # ------------ Responsive layout handler -------------
-    def _on_window_resize(self, *args):
-        """Adjust layouts whenever window size properties change."""
-        # Ensure UI elements are created
-        if not self.detail_forecast_box:
+
+    def setup_responsive_layout(self):
+        """Setup responsive layout using AdwBreakpoint."""
+        if not hasattr(self, 'multi_layout_view') or not self.multi_layout_view:
             return
-
-        # Get current window size
-        width, _ = self.get_default_size()
-
-        # When the window is narrow, stack vertically with forecast first.
-        if width < 450:
-            # Switch to vertical stacking
-            if self.detail_forecast_box.get_orientation() != Gtk.Orientation.VERTICAL:
-                self.detail_forecast_box.set_orientation(Gtk.Orientation.VERTICAL)
-                # Re-order children: forecast on top, cards below
-                self.detail_forecast_box.remove(self.card_box_ref)
-                self.detail_forecast_box.remove(self.forecast_box_ref)
-                self.detail_forecast_box.append(self.forecast_box_ref)
-                self.detail_forecast_box.append(self.card_box_ref)
-
-            # Make cards single column
-            if self.card_flow_ref:
-                self.card_flow_ref.set_max_children_per_line(1)
-        else:
-            # Horizontal side-by-side layout
-            if self.detail_forecast_box.get_orientation() != Gtk.Orientation.HORIZONTAL:
-                self.detail_forecast_box.set_orientation(Gtk.Orientation.HORIZONTAL)
-                # Ensure order: cards first, forecast second
-                self.detail_forecast_box.remove(self.card_box_ref)
-                self.detail_forecast_box.remove(self.forecast_box_ref)
-                self.detail_forecast_box.append(self.card_box_ref)
-                self.detail_forecast_box.append(self.forecast_box_ref)
-
-            if self.card_flow_ref:
-                self.card_flow_ref.set_max_children_per_line(3)
+            
+        # Create a breakpoint for narrow screens
+        breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 450px"))
+        
+        # Add setter to switch layout when breakpoint condition is met
+        setter = Adw.BreakpointSetter.new(self.multi_layout_view, "layout-name", "narrow")
+        breakpoint.add_setter(setter)
+        
+        # Add setter to adjust card flow columns when breakpoint condition is met
+        if self.card_flow_ref:
+            card_flow_setter = Adw.BreakpointSetter.new(self.card_flow_ref, "max-children-per-line", 1)
+            breakpoint.add_setter(card_flow_setter)
+        
+        # Add the breakpoint to the window
+        self.add_breakpoint(breakpoint)
+        
+        # Create a breakpoint for wide screens
+        wide_breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("min-width: 451px"))
+        
+        # Add setter to switch layout when breakpoint condition is met
+        wide_setter = Adw.BreakpointSetter.new(self.multi_layout_view, "layout-name", "wide")
+        wide_breakpoint.add_setter(wide_setter)
+        
+        # Add setter to adjust card flow columns when breakpoint condition is met
+        if self.card_flow_ref:
+            wide_card_flow_setter = Adw.BreakpointSetter.new(self.card_flow_ref, "max-children-per-line", 3)
+            wide_breakpoint.add_setter(wide_card_flow_setter)
+        
+        # Add the breakpoint to the window
+        self.add_breakpoint(wide_breakpoint)

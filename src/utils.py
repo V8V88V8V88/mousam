@@ -4,8 +4,10 @@ from datetime import datetime
 import time
 import gi
 from .config import settings
+import threading
+from gettext import gettext as _
 
-gi.require_version("Adw", "1")
+gi.require_version("Adw", "1.6")
 from gi.repository import Adw
 
 local_time_data = dict()

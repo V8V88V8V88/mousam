@@ -23,7 +23,7 @@ import gi
 from .mousam import WeatherMainWindow
 from .config import settings
 
-gi.require_version('Adw', '1')
+gi.require_version('Adw', '1.6')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gio, Adw, Gdk
 

@@ -2,8 +2,8 @@ import gi
 from gi.repository import Gtk, Adw
 from gettext import gettext as _, pgettext as C_
 
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
+gi.require_version("Gtk", "4.0")
+gi.require_version('Adw', '1.6')
 
 
 """Present the app's about dialog."""

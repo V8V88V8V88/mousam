@@ -1,9 +1,9 @@
 import gi
 import cairo 
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk, Adw, GLib
 
 gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
+gi.require_version('Adw', '1.6')
 
 class PollutionBar(Gtk.DrawingArea):
     def __init__(self,pos):

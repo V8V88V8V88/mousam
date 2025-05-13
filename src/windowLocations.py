@@ -10,7 +10,7 @@ from gettext import gettext as _, pgettext as C_
 
 
 gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
+gi.require_version("Adw", "1.6")
 
 global updated_at
 updated_at = time.time()
